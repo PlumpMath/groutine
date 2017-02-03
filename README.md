@@ -1,5 +1,5 @@
 # groutine
 
-groutine is a C++ implementation of coroutine library
+a C++ implementation of coroutine library
 
 
