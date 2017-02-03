@@ -1,5 +1,5 @@
-# gRoutine
+# groutine
 
-gRoutine is a C++ implementation of coroutine library
+groutine is a C++ implementation of coroutine library
 
 

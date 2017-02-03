@@ -1,4 +1,4 @@
-// Copyright (c) 2016, The gRoutine Authors.
+// Copyright (c) 2016, The groutine Authors.
 // All rights reserved.
 //
 // Author: Zheng Gonglin <scaugrated@163.com>
