@@ -1,5 +1,5 @@
-# zRoutine
+# gRoutine
 
-zRoutine is a C++ implementation of coroutine library
+gRoutine is a C++ implementation of coroutine library
 
 
