@@ -66,6 +66,8 @@ struct Coroutine {
 };
 
 struct CoroutineManager {
+    static const unsigned int DefaultMaxDeadCoroutineNum;
+
     CoroutineManager();
     ~CoroutineManager();
 
@@ -76,6 +78,7 @@ struct CoroutineManager {
     Coroutine* alive_co;
     // list of Coroutine;
     Coroutine* dead_co;
+    unsigned int dead_co_num;
     // Coroutine pointer
     Coroutine* running_co;
 };

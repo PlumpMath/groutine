@@ -23,6 +23,7 @@ inline void MallocCoStack(Coroutine* co, const size_t stack_size);
 inline void FreeCoStack(Coroutine* co);
 
 const size_t ShareStack::DefaultStackSize = 1024 * 1024 * 8;
+const unsigned int CoroutineManager::DefaultMaxDeadCoroutineNum = 1024;
 
 ShareStack::ShareStack():
     stack(new char[DefaultStackSize]),
@@ -62,6 +63,7 @@ Coroutine::~Coroutine() {
 CoroutineManager::CoroutineManager():
         alive_co(NULL),
         dead_co(NULL),
+        dead_co_num(0),
         running_co(NULL) {}
 
 CoroutineManager::~CoroutineManager() {
@@ -93,6 +95,7 @@ Coroutine* CoCreate(CoroutineManager* co_manager,
         // get coroutine from dead-coroutine list.
         co = co_manager->dead_co;
         co_manager->dead_co = co_manager->dead_co->next;
+        --co_manager->dead_co_num;
         co->state = CO_STATE_READY;
         co->function = co_function;
         co->function_arg = co_function_arg;
@@ -200,6 +203,12 @@ void CoFunctionWrapper(Coroutine* co) {
     }
     co->state = CO_STATE_DEAD;
 
+    if (co_manager->dead_co_num >=
+        CoroutineManager::DefaultMaxDeadCoroutineNum) {
+        delete co;
+        return;
+    }
+
     // put co to manager's dead-coroutine list.
     if (!co_manager->dead_co) {
         co_manager->dead_co = co;
@@ -207,6 +216,7 @@ void CoFunctionWrapper(Coroutine* co) {
         co->next = co_manager->dead_co;
         co_manager->dead_co = co;
     }
+    ++co_manager->dead_co_num;
 }
 
 inline void MallocCoStack(Coroutine* co, const size_t stack_size) {
