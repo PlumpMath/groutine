@@ -28,6 +28,7 @@ void* Alice(void* arg) {
     CoYield(co_alice);
     printf("Alice: Nice to meet you too, bye bye.\n");
     CoYield(co_alice);
+    return NULL;
 }
 
 void* Bob(void* arg) {
@@ -39,6 +40,7 @@ void* Bob(void* arg) {
     CoYield(co_bob);
     printf("  Bob: Bye bye.\n");
     CoYield(co_bob);
+    return NULL;
 }
 
 int main() {

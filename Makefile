@@ -1,6 +1,6 @@
 CXX=g++
 WARNING=-Wall -Werror
-CXXFLAGS=-O2 -I../
+CXXFLAGS=-O2 -I../ $(WARNING)
 OBJECTS=example_alice_and_bob
 
 all: $(OBJECTS)
