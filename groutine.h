@@ -11,6 +11,7 @@
 
 namespace groutine {
 
+struct ShareStack;
 struct CoroutineManager;
 struct Coroutine;
 
@@ -23,8 +24,6 @@ enum CoroutineState {
     CO_STATE_DEAD,
 };
 
-const size_t DEFAULT_CO_STACK_SIZE = 65535;
-
 CoroutineManager* CreateCoroutineManager();
 void FreeCoroutineManager(CoroutineManager* co_manager);
 
@@ -33,6 +32,18 @@ Coroutine* CoCreate(CoroutineManager* co_manager,
                     void* co_function_arg);
 void CoResume(Coroutine* co);
 void CoYield(Coroutine* co);
+
+struct ShareStack {
+    static const size_t DefaultStackSize;
+
+    ShareStack();
+    ~ShareStack();
+
+    char* stack;
+    size_t stack_size;
+
+    void Debug(Coroutine* co);
+};
 
 struct Coroutine {
     explicit Coroutine(CoroutineManager* _co_manage,
@@ -49,6 +60,7 @@ struct Coroutine {
 
     char* stack;
     size_t stack_size;
+    size_t used_size;
 
     Coroutine* next;
 };
@@ -56,6 +68,8 @@ struct Coroutine {
 struct CoroutineManager {
     CoroutineManager();
     ~CoroutineManager();
+
+    ShareStack running_stack;
 
     ucontext_t ctx;
     // list of Coroutine;

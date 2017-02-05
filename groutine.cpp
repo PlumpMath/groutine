@@ -9,16 +9,37 @@
 #include <assert.h>
 #include <ucontext.h>
 
+#include <cstdio>
 #include <cstdlib>
+#include <cstring>
 
 namespace groutine {
 
 // private function.
 void FreeCoroutineList(Coroutine* head);
 void CoFunctionWrapper(Coroutine* co);
-// TODO(Zheng Gonglin): update malloc and free coroutine stack
-void MallocCoStack(Coroutine* co);
-void FreeCoStack(Coroutine* co);
+void SaveCoStack(Coroutine* co);
+inline void MallocCoStack(Coroutine* co, const size_t stack_size);
+inline void FreeCoStack(Coroutine* co);
+
+const size_t ShareStack::DefaultStackSize = 1024 * 1024 * 8;
+
+ShareStack::ShareStack():
+    stack(new char[DefaultStackSize]),
+    stack_size(DefaultStackSize) {}
+
+ShareStack::~ShareStack() {
+    if (stack) {
+        delete[] stack;
+    }
+}
+
+void ShareStack::Debug(Coroutine* co) {
+    for (int i = 0; i < 16; i++) {
+        printf("%d|", stack[stack_size-1-i]);
+    }
+    printf(" coroutine used stack size: %lu\n", co->used_size);
+}
 
 Coroutine::Coroutine(CoroutineManager* _co_manager,
                      CoFunction _function,
@@ -27,9 +48,10 @@ Coroutine::Coroutine(CoroutineManager* _co_manager,
         state(CO_STATE_READY),
         function(_function),
         function_arg(_function_arg),
-        next(NULL) {
-    MallocCoStack(this);
-}
+        stack(NULL),
+        stack_size(0),
+        used_size(0),
+        next(NULL) {}
 
 Coroutine::~Coroutine() {
     if (stack) {
@@ -38,7 +60,9 @@ Coroutine::~Coroutine() {
 }
 
 CoroutineManager::CoroutineManager():
-        alive_co(NULL), dead_co(NULL), running_co(NULL) {}
+        alive_co(NULL),
+        dead_co(NULL),
+        running_co(NULL) {}
 
 CoroutineManager::~CoroutineManager() {
     if (alive_co) {
@@ -98,11 +122,21 @@ void CoResume(Coroutine* co) {
     switch (state) {
         case CO_STATE_READY:
             getcontext(&(co->ctx));
-            co->ctx.uc_stack.ss_sp = co->stack;
-            co->ctx.uc_stack.ss_size = co->stack_size;
+            // use ShareStack as running stack for running coroutine.
+            co->ctx.uc_stack.ss_sp = co_manager->running_stack.stack;
+            co->ctx.uc_stack.ss_size = co_manager->running_stack.stack_size;
             co->ctx.uc_link = &(co_manager->ctx);
             makecontext(&(co->ctx), (void (*)(void))CoFunctionWrapper, 1, co);
+            co_manager->running_co = co;
+            co->state = CO_STATE_RUNNING;
+            swapcontext(&(co_manager->ctx), &(co->ctx));
+            break;
         case CO_STATE_SUPPEND:
+            memcpy(co_manager->running_stack.stack + \
+                   co_manager->running_stack.stack_size - \
+                   co->used_size,
+                   co->stack,
+                   co->used_size);
             co_manager->running_co = co;
             co->state = CO_STATE_RUNNING;
             swapcontext(&(co_manager->ctx), &(co->ctx));
@@ -118,6 +152,8 @@ void CoYield(Coroutine* co) {
 
     switch (state) {
         case CO_STATE_RUNNING:
+            // copy stack data from ShareStack to coroutine's stack.
+            SaveCoStack(co);
             co_manager->running_co = NULL;
             co->state = CO_STATE_SUPPEND;
             swapcontext(&(co->ctx), &(co_manager->ctx));
@@ -125,6 +161,30 @@ void CoYield(Coroutine* co) {
         default:
             assert(0);
     }
+}
+
+void SaveCoStack(Coroutine* co) {
+    CoroutineManager* co_manager = co->co_manager;
+    // co_manager->running_stack.Debug(co);
+
+    // only for x86 CPU(Little endian)
+    char* bottom = co_manager->running_stack.stack +
+                   co_manager->running_stack.stack_size;
+
+    char dummy_var;
+    size_t used_stack_size = bottom - &dummy_var;
+    assert(used_stack_size >= 0);
+    assert(used_stack_size <= ShareStack::DefaultStackSize);
+
+    if (!co->stack) {
+        MallocCoStack(co, used_stack_size);
+    } else if (co->stack_size < used_stack_size) {
+        FreeCoStack(co);
+        MallocCoStack(co, used_stack_size);
+    }
+
+    memcpy(co->stack, &dummy_var, used_stack_size);
+    co->used_size = used_stack_size;
 }
 
 void CoFunctionWrapper(Coroutine* co) {
@@ -135,6 +195,9 @@ void CoFunctionWrapper(Coroutine* co) {
     function(function_arg);
 
     co_manager->running_co = NULL;
+    if (co->stack) {
+        FreeCoStack(co);
+    }
     co->state = CO_STATE_DEAD;
 
     // put co to manager's dead-coroutine list.
@@ -146,15 +209,17 @@ void CoFunctionWrapper(Coroutine* co) {
     }
 }
 
-void MallocCoStack(Coroutine* co) {
-    // TODO(Zheng Gonglin): update malloc memory algorithm.
-    co->stack = new char[DEFAULT_CO_STACK_SIZE];
-    co->stack_size = DEFAULT_CO_STACK_SIZE;
+inline void MallocCoStack(Coroutine* co, const size_t stack_size) {
+    co->stack = new char[stack_size];
+    co->stack_size = stack_size;
+    co->used_size = 0;
 }
 
-void FreeCoStack(Coroutine* co) {
-    // TODO(Zheng Gonglin): update free memory algorithm.
+inline void FreeCoStack(Coroutine* co) {
     delete[] co->stack;
+    co->stack = NULL;
+    co->stack_size = 0;
+    co->used_size = 0;
 }
 
 void FreeCoroutineList(Coroutine* head) {
